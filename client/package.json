@@ -1,0 +1,45 @@
+{
+  "name": "@businessmaps/bifrost-browser",
+  "version": "0.1.0",
+  "description": "Browser client for @businessmaps/bifrost - register tools that AI can call",
+  "type": "module",
+  "main": "./index.cjs",
+  "module": "./index.js",
+  "types": "./index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./index.d.ts",
+        "default": "./index.js"
+      },
+      "require": {
+        "types": "./index.d.cts",
+        "default": "./index.cjs"
+      }
+    }
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Business-Maps/bifrost.git",
+    "directory": "client"
+  },
+  "keywords": [
+    "bifrost",
+    "mcp",
+    "browser",
+    "bridge",
+    "ai",
+    "websocket",
+    "client"
+  ],
+  "files": [
+    "index.js",
+    "index.cjs",
+    "index.d.ts",
+    "index.d.cts"
+  ]
+}

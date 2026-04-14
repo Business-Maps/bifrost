@@ -1,0 +1,592 @@
+#!/usr/bin/env node
+
+import { createInterface } from "readline";
+import { randomBytes } from "crypto";
+import { fileURLToPath } from "url";
+import { dirname, join } from "path";
+import { readFileSync } from "fs";
+
+const __dirname = dirname(fileURLToPath(import.meta.url));
+
+// ---------------------------------------------------------------------------
+// ANSI helpers
+// ---------------------------------------------------------------------------
+const c = process.stderr.isTTY ? {
+  r: "\x1b[0m",       // reset
+  red: "\x1b[31m",
+  RED: "\x1b[91m",    // bright red
+  dim: "\x1b[2m",
+  bold: "\x1b[1m",
+  white: "\x1b[97m",
+  black: "\x1b[30m",
+  bgRed: "\x1b[41m",
+  gray: "\x1b[90m",
+} : { r:"",red:"",RED:"",dim:"",bold:"",white:"",black:"",bgRed:"",gray:"" };
+
+function log(msg) { process.stderr.write(msg + "\n"); }
+
+// ---------------------------------------------------------------------------
+// ASCII globe - red sphere with black lat/long grid
+// ---------------------------------------------------------------------------
+function renderGlobe() {
+  const R = 9;
+  const lines = [];
+  for (let y = -R; y <= R; y++) {
+    let row = "";
+    const rSlice = Math.sqrt(R * R - y * y);
+    for (let x = -R * 2; x <= R * 2; x++) {
+      const nx = x / 2;
+      if (nx * nx + y * y > R * R) {
+        row += " ";
+        continue;
+      }
+      // spherical coords for grid
+      const z = Math.sqrt(Math.max(0, R * R - nx * nx - y * y));
+      const theta = Math.atan2(y, nx);
+      const phi = Math.acos(z / R);
+      const lat = Math.abs(y);
+      const lonAngle = Math.atan2(nx, z);
+
+      // grid lines: latitudes every ~3 units, longitudes every ~30 degrees
+      const isLat = lat % 3 < 0.8;
+      const lonDeg = ((lonAngle * 180 / Math.PI) + 360) % 360;
+      const isLon = lonDeg % 30 < 6;
+      // equator
+      const isEquator = Math.abs(y) < 1;
+
+      if (isEquator || isLat || isLon) {
+        row += `${c.black}${c.bgRed}+${c.r}`;
+      } else {
+        row += `${c.RED}.${c.r}`;
+      }
+    }
+    lines.push(row);
+  }
+  return lines;
+}
+
+// ---------------------------------------------------------------------------
+// Startup banner
+// ---------------------------------------------------------------------------
+function printBanner(version) {
+  log("");
+
+  const globe = renderGlobe();
+  const bannerLines = [
+    "",
+    "",
+    "",
+    `${c.bold}${c.RED}  ██████╗ ██╗███████╗██████╗  ██████╗ ███████╗████████╗${c.r}`,
+    `${c.bold}${c.RED}  ██╔══██╗██║██╔════╝██╔══██╗██╔═══██╗██╔════╝╚══██╔══╝${c.r}`,
+    `${c.bold}${c.RED}  ██████╔╝██║█████╗  ██████╔╝██║   ██║███████╗   ██║   ${c.r}`,
+    `${c.bold}${c.RED}  ██╔══██╗██║██╔══╝  ██╔══██╗██║   ██║╚════██║   ██║   ${c.r}`,
+    `${c.bold}${c.RED}  ██████╔╝██║██║     ██║  ██║╚██████╔╝███████║   ██║   ${c.r}`,
+    `${c.bold}${c.RED}  ╚═════╝ ╚═╝╚═╝     ╚═╝  ╚═╝ ╚═════╝ ╚══════╝   ╚═╝   ${c.r}`,
+    "",
+    `${c.dim}${c.red}  ---------------------------------------- v${version} --${c.r}`,
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+    "",
+  ];
+
+  const globeW = globe.length;
+  const bannerW = bannerLines.length;
+  const rows = Math.max(globeW, bannerW);
+
+  for (let i = 0; i < rows; i++) {
+    const gLine = i < globe.length ? globe[i] : "";
+    const bLine = i < bannerLines.length ? bannerLines[i] : "";
+    log(`  ${gLine}  ${bLine}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Styled help
+// ---------------------------------------------------------------------------
+function printHelp() {
+  log("");
+  log(`  ${c.bold}${c.RED}BIFROST${c.r} ${c.dim}${c.red}----------------------${c.r}`);
+  log("");
+  log(`  ${c.dim}MCP browser bridge daemon${c.r}`);
+  log("");
+  log(`  ${c.white}${c.bold}USAGE${c.r}`);
+  log(`    ${c.gray}$${c.r} bifrost ${c.dim}[options]${c.r}`);
+  log("");
+  log(`  ${c.white}${c.bold}OPTIONS${c.r}`);
+  log(`    ${c.RED}--port${c.r} ${c.dim}<port>${c.r}       WebSocket port        ${c.gray}(default: 3099)${c.r}`);
+  log(`    ${c.RED}--timeout${c.r} ${c.dim}<secs>${c.r}    Tool call timeout     ${c.gray}(default: 120)${c.r}`);
+  log(`    ${c.RED}--no-auth${c.r}            Disable token auth    ${c.gray}(dev only)${c.r}`);
+  log(`    ${c.RED}--help${c.r}, ${c.RED}-h${c.r}           Show this message`);
+  log(`    ${c.RED}--version${c.r}, ${c.RED}-v${c.r}        Show version`);
+  log("");
+  log(`  ${c.dim}${c.red}----------------------------------------------------${c.r}`);
+  log("");
+}
+
+// ---------------------------------------------------------------------------
+// CLI argument parsing
+// ---------------------------------------------------------------------------
+const args = process.argv.slice(2);
+
+function flag(name) { return args.includes(name); }
+function option(name, fallback) {
+  const idx = args.indexOf(name);
+  return idx !== -1 && idx + 1 < args.length ? args[idx + 1] : fallback;
+}
+
+let VERSION = "0.0.1";
+try {
+  const pkg = JSON.parse(readFileSync(join(__dirname, "..", "package.json"), "utf8"));
+  VERSION = pkg.version || VERSION;
+} catch {}
+
+if (flag("--help") || flag("-h")) {
+  printHelp();
+  process.exit(0);
+}
+
+if (flag("--version") || flag("-v")) {
+  log(`${c.bold}${c.RED}bifrost${c.r} ${c.dim}${VERSION}${c.r}`);
+  process.exit(0);
+}
+
+const { MiniWebSocketServer } = await import(
+  new URL(`file://${join(__dirname, "..", "lib", "websocket.js")}`)
+).catch(() =>
+  import(new URL(`file://${join(__dirname, "websocket.js")}`))
+);
+
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+const PORT = parseInt(option("--port", process.env.PORT || "3099"), 10);
+const TIMEOUT_MS = parseInt(option("--timeout", "120"), 10) * 1000;
+const NO_AUTH = flag("--no-auth");
+const MAX_MESSAGE_SIZE = 1 * 1024 * 1024; // 1MB
+const MAX_PENDING_CALLS = 100;
+const MAX_CALLS_PER_MIN = 120;
+const HEARTBEAT_INTERVAL = 30_000;
+const HEARTBEAT_TIMEOUT = 10_000;
+
+function isLocalOrigin(origin) {
+  if (!origin) return true;
+  try {
+    const url = new URL(origin);
+    return url.hostname === "localhost" || url.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
+const AUTH_TOKEN = NO_AUTH ? null : randomBytes(32).toString("base64url");
+
+// ---------------------------------------------------------------------------
+// State
+// ---------------------------------------------------------------------------
+const connections = new Map();
+const pendingConnections = new Map(); // connId → { ws, origin, createdAt, timer }
+const pendingCalls = new Map();
+let connectionIdCounter = 0;
+let callIdCounter = 0;
+
+const PENDING_TIMEOUT = 60_000; // Auto-reject unapproved connections after 60s
+const MAX_PENDING = 5;          // Max simultaneous pending connections
+
+// rate limiting
+const rateMap = new Map();
+
+// ---------------------------------------------------------------------------
+// Utils
+// ---------------------------------------------------------------------------
+function now() { return Date.now(); }
+
+function timestamp() {
+  return new Date().toLocaleTimeString("en-US", { hour12: false });
+}
+
+function rateLimit(key) {
+  const bucket = rateMap.get(key) || { count: 0, ts: now() };
+  if (now() - bucket.ts > 60_000) {
+    bucket.count = 0;
+    bucket.ts = now();
+  }
+  bucket.count++;
+  rateMap.set(key, bucket);
+  return bucket.count <= MAX_CALLS_PER_MIN;
+}
+
+function safeParse(raw) {
+  if (typeof raw !== "string" || raw.length > MAX_MESSAGE_SIZE) return null;
+  try { return JSON.parse(raw); } catch { return null; }
+}
+
+function safeSend(ws, obj) {
+  const data = JSON.stringify(obj);
+  if (ws.bufferedAmount > MAX_MESSAGE_SIZE) {
+    ws.close();
+    return false;
+  }
+  ws.send(data);
+  return true;
+}
+
+// ---------------------------------------------------------------------------
+// MCP stdio
+// ---------------------------------------------------------------------------
+const rl = createInterface({ input: process.stdin });
+
+function sendMcp(msg) {
+  process.stdout.write(JSON.stringify(msg) + "\n");
+}
+
+rl.on("line", (line) => {
+  const msg = safeParse(line);
+  if (!msg) return;
+  handleMcp(msg);
+});
+
+// ---------------------------------------------------------------------------
+// MCP handler
+// ---------------------------------------------------------------------------
+function handleMcp(msg) {
+  const { method, id, params } = msg;
+
+  if (method === "initialize") {
+    sendMcp({
+      jsonrpc: "2.0",
+      id,
+      result: {
+        protocolVersion: "2024-11-05",
+        capabilities: { tools: { listChanged: true } },
+        serverInfo: { name: "bifrost", version: "secure" },
+      },
+    });
+    return;
+  }
+
+  if (method === "tools/list") {
+    const tools = [];
+
+    // Built-in tool: connection info
+    tools.push({
+      name: "bifrost_connection_info",
+      description: "Returns the WebSocket port, connection status, and any pending browser connections waiting for approval.",
+      inputSchema: { type: "object", properties: {} },
+    });
+
+    // Built-in tool: approve a pending browser connection
+    tools.push({
+      name: "bifrost_approve",
+      description: "Approve a pending browser connection. Call this when bifrost_connection_info shows a pending connection from a site you recognize.",
+      inputSchema: {
+        type: "object",
+        properties: {
+          connectionId: { type: "string", description: "The connectionId from pendingConnections" },
+        },
+        required: ["connectionId"],
+      },
+    });
+
+    for (const [cid, conn] of connections) {
+      for (const tool of conn.tools.values()) {
+        tools.push({
+          name: `${cid}:${tool.name}`, // namespaced
+          description: tool.description || "",
+          inputSchema: tool.inputSchema || {},
+        });
+      }
+    }
+
+    sendMcp({ jsonrpc: "2.0", id, result: { tools } });
+    return;
+  }
+
+  if (method === "tools/call") {
+    const { name, arguments: args } = params;
+
+    // Built-in tools (no connId prefix)
+    if (name === "bifrost_connection_info") {
+      const pending = [...pendingConnections.entries()].map(([cid, e]) => ({
+        connectionId: cid,
+        origin: e.origin,
+      }));
+      const status = connections.size > 0
+        ? "connected"
+        : pending.length > 0
+          ? "has_pending"
+          : "waiting_for_browser";
+      sendMcp({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          content: [{
+            type: "text",
+            text: JSON.stringify({
+              port: PORT,
+              token: AUTH_TOKEN,
+              websocketUrl: `ws://localhost:${PORT}`,
+              connectedTabs: connections.size,
+              pendingConnections: pending,
+              status,
+            }),
+          }],
+        },
+      });
+      return;
+    }
+
+    if (name === "bifrost_approve") {
+      const { connectionId } = args || {};
+      const entry = pendingConnections.get(connectionId);
+      if (!entry) {
+        sendMcp({
+          jsonrpc: "2.0",
+          id,
+          result: {
+            content: [{ type: "text", text: JSON.stringify({ error: "No pending connection with that ID" }) }],
+          },
+        });
+        return;
+      }
+      clearTimeout(entry.timer);
+      pendingConnections.delete(connectionId);
+      safeSend(entry.ws, { type: "approved" });
+      acceptConnection(connectionId, entry.ws);
+      sendMcp({
+        jsonrpc: "2.0",
+        id,
+        result: {
+          content: [{ type: "text", text: JSON.stringify({ approved: connectionId, origin: entry.origin }) }],
+        },
+      });
+      return;
+    }
+
+    const [connId, toolName] = name.split(":");
+    const conn = connections.get(connId);
+
+    if (!conn || !conn.tools.has(toolName)) {
+      sendMcp({
+        jsonrpc: "2.0",
+        id,
+        error: { code: -32000, message: "Tool not found" },
+      });
+      return;
+    }
+
+    if (pendingCalls.size >= MAX_PENDING_CALLS) {
+      sendMcp({
+        jsonrpc: "2.0",
+        id,
+        error: { code: -32001, message: "Too many pending calls" },
+      });
+      return;
+    }
+
+    const callId = `c_${++callIdCounter}`;
+
+    const timer = setTimeout(() => {
+      pendingCalls.delete(callId);
+    }, TIMEOUT_MS);
+
+    pendingCalls.set(callId, { id, timer, connId });
+
+    safeSend(conn.ws, {
+      type: "tool_call",
+      callId,
+      name: toolName,
+      arguments: args,
+    });
+
+    return;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// WebSocket server
+// ---------------------------------------------------------------------------
+const wss = new MiniWebSocketServer({ port: PORT }, () => {
+  printBanner(VERSION);
+
+  log(`  ${c.dim}${c.red}────────────────────────────────────────────────────${c.r}`);
+  log("");
+  log(`  ${c.gray}PORT${c.r}      ${c.white}${PORT}${c.r}`);
+  log(`  ${c.gray}TIMEOUT${c.r}   ${c.white}${TIMEOUT_MS / 1000}s${c.r}`);
+  log(`  ${c.gray}AUTH${c.r}      ${AUTH_TOKEN ? `${c.RED}ENABLED${c.r}` : `${c.dim}DISABLED${c.r}`}`);
+  log("");
+
+  // These lines must remain parseable by tests
+  log(`  Secure MCP bridge running on ws://localhost:${PORT}`);
+  if (AUTH_TOKEN) {
+    // Token value stays raw (no ANSI) so test regex can capture it
+    log(`  Auth token (use as header): ${AUTH_TOKEN}`);
+    log(`  ${c.dim}AI tools can call bifrost_connection_info to get this token${c.r}`);
+  } else {
+    log(`  ${c.dim}Auth disabled (--no-auth)${c.r}`);
+  }
+
+  log("");
+  log(`  ${c.dim}${c.red}────────────────────────────────────────────────────${c.r}`);
+  log(`  ${c.gray}Waiting for connections...${c.r}`);
+  log("");
+});
+
+// ---------------------------------------------------------------------------
+// Connection lifecycle
+// ---------------------------------------------------------------------------
+
+/** Promote a WebSocket to an active, tool-bearing connection. */
+function acceptConnection(connId, ws) {
+  const conn = {
+    ws,
+    tools: new Map(),
+    lastPong: now(),
+  };
+
+  connections.set(connId, conn);
+  safeSend(ws, { type: "welcome", connectionId: connId });
+  log(`  ${c.gray}${timestamp()}${c.r} ${c.RED}+${c.r} ${c.white}${connId}${c.r} ${c.dim}connected${c.r}`);
+
+  // heartbeat
+  const interval = setInterval(() => {
+    if (now() - conn.lastPong > HEARTBEAT_INTERVAL + HEARTBEAT_TIMEOUT) {
+      ws.close();
+      return;
+    }
+    safeSend(ws, { type: "ping" });
+  }, HEARTBEAT_INTERVAL);
+
+  ws.on("message", (raw) => {
+    if (!rateLimit(connId)) return;
+
+    const msg = safeParse(raw);
+    if (!msg) return;
+
+    if (msg.type === "pong") {
+      conn.lastPong = now();
+      return;
+    }
+
+    if (msg.type === "register_tools") {
+      conn.tools.clear();
+
+      for (const tool of msg.tools || []) {
+        if (!tool.name) continue;
+        conn.tools.set(tool.name, tool);
+      }
+
+      log(`  ${c.gray}${timestamp()}${c.r} ${c.RED}*${c.r} ${c.white}${connId}${c.r} ${c.dim}registered${c.r} ${c.RED}${conn.tools.size}${c.r} ${c.dim}tools${c.r}`);
+
+      sendMcp({
+        jsonrpc: "2.0",
+        method: "notifications/tools/list_changed",
+      });
+      return;
+    }
+
+    if (msg.type === "tool_result") {
+      const pending = pendingCalls.get(msg.callId);
+      if (!pending) return;
+
+      clearTimeout(pending.timer);
+      pendingCalls.delete(msg.callId);
+
+      sendMcp({
+        jsonrpc: "2.0",
+        id: pending.id,
+        result: {
+          content: [
+            {
+              type: "text",
+              text: JSON.stringify(msg.result ?? msg.error),
+            },
+          ],
+        },
+      });
+    }
+  });
+
+  ws.on("close", () => {
+    clearInterval(interval);
+
+    for (const [id, p] of pendingCalls) {
+      if (p.connId === connId) {
+        clearTimeout(p.timer);
+        pendingCalls.delete(id);
+      }
+    }
+
+    connections.delete(connId);
+    log(`  ${c.gray}${timestamp()}${c.r} ${c.dim}-${c.r} ${c.dim}${connId} disconnected${c.r}`);
+
+    sendMcp({
+      jsonrpc: "2.0",
+      method: "notifications/tools/list_changed",
+    });
+  });
+}
+
+/** Hold a tokenless connection until the AI approves it. */
+function pendConnection(connId, ws, origin) {
+  if (pendingConnections.size >= MAX_PENDING) {
+    ws.terminate();
+    return;
+  }
+
+  const entry = { ws, origin, createdAt: now() };
+  pendingConnections.set(connId, entry);
+
+  safeSend(ws, { type: "pending_approval", connectionId: connId });
+
+  entry.timer = setTimeout(() => {
+    if (pendingConnections.has(connId)) {
+      safeSend(ws, { type: "rejected", reason: "timeout" });
+      ws.terminate();
+      pendingConnections.delete(connId);
+    }
+  }, PENDING_TIMEOUT);
+
+  ws.on("close", () => {
+    clearTimeout(entry.timer);
+    pendingConnections.delete(connId);
+  });
+
+  log(`  ${c.gray}${timestamp()}${c.r} ${c.dim}?${c.r} ${c.white}${connId}${c.r} ${c.dim}pending approval${c.r} ${c.gray}(${origin || "unknown"})${c.r}`);
+
+  sendMcp({
+    jsonrpc: "2.0",
+    method: "notifications/tools/list_changed",
+  });
+}
+
+wss.on("connection", (ws, req) => {
+  const origin = req.headers.origin || null;
+  const connId = `conn_${++connectionIdCounter}`;
+
+  if (AUTH_TOKEN) {
+    // Auth mode: token is the security gate
+    const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
+    const queryToken = url.searchParams.get("token");
+    const headerToken = req.headers["sec-websocket-protocol"];
+
+    if (queryToken === AUTH_TOKEN || headerToken === AUTH_TOKEN) {
+      // Valid token → immediate accept (any origin)
+      acceptConnection(connId, ws);
+    } else if (!queryToken && !headerToken) {
+      // No token at all → pending approval (the AI approves)
+      pendConnection(connId, ws, origin);
+    } else {
+      // Wrong token → reject
+      ws.terminate();
+    }
+  } else {
+    // --no-auth mode → accept all (127.0.0.1 binding is the security perimeter)
+    acceptConnection(connId, ws);
+  }
+});

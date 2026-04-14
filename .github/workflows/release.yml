@@ -1,0 +1,58 @@
+name: Release
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Check what would be published without actually pushing to NPM'
+        required: false
+        default: 'false'
+        type: boolean
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - run: npm install
+      - run: npm test
+
+      - name: Publish @businessmaps/bifrost
+        run: |
+          if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+            npm publish --dry-run --provenance --access public
+          else
+            npm publish --provenance --access public
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Publish @businessmaps/bifrost-browser (if version changed)
+        run: |
+          cd client
+          LOCAL=$(node -p "require('./package.json').version")
+          REMOTE=$(npm view @businessmaps/bifrost-browser version 2>/dev/null || echo "0.0.0")
+          if [ "$LOCAL" != "$REMOTE" ]; then
+            if [ "${{ github.event.inputs.dry_run }}" = "true" ]; then
+              echo "Would publish @businessmaps/bifrost-browser@$LOCAL"
+            else
+              npm publish --provenance --access public
+            fi
+          else
+            echo "Skipping - @businessmaps/bifrost-browser@$LOCAL already published"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

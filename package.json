@@ -1,0 +1,41 @@
+{
+  "name": "@businessmaps/bifrost",
+  "version": "0.4.0",
+  "description": "Bridge any browser web app to Claude Code via MCP",
+  "type": "module",
+  "bin": {
+    "bifrost": "./bin/bifrost"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "start": "node bin/bifrost",
+    "test": "node --test test/*.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Business-Maps/bifrost.git"
+  },
+  "keywords": [
+    "bifrost",
+    "mcp",
+    "browser",
+    "bridge",
+    "claude",
+    "websocket"
+  ],
+  "files": [
+    "bin/",
+    "lib/",
+    "LICENSE",
+    "README.md"
+  ],
+  "dependencies": {
+    "ws": "^8.20.0"
+  }
+}

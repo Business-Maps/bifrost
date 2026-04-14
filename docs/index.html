@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>@businessmaps/bifrost</title>
+  <meta name="description" content="MCP server that lets AI tools call functions running in your browser. Zero dependencies.">
+  <meta property="og:title" content="@businessmaps/bifrost">
+  <meta property="og:description" content="MCP server that lets AI tools call functions running in your browser. Zero dependencies.">
+  <meta property="og:type" content="website">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&family=Fira+Code:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #07070a;
+      --surface: #111116;
+      --surface-2: #19191f;
+      --border: #222230;
+      --text: #e8e8ed;
+      --text-2: #9898a6;
+      --text-3: #5c5c6a;
+      --accent: #e8a135;
+      --accent-hover: #f0b85a;
+      --accent-dim: rgba(232, 161, 53, 0.07);
+      --accent-border: rgba(232, 161, 53, 0.18);
+      --heading: 'Syne', sans-serif;
+      --body: 'DM Sans', sans-serif;
+      --mono: 'Fira Code', monospace;
+      --code-kw: #c49cff;
+      --code-str: #5ce8b5;
+      --code-fn: #6db3f8;
+      --code-cm: #555566;
+      --code-prop: #e8a135;
+      --code-tag: #f47067;
+      --code-attr: #d2a8ff;
+      --max-w: 1080px;
+    }
+
+    html { scroll-behavior: smooth; }
+
+    body {
+      font-family: var(--body);
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.65;
+      font-weight: 300;
+      -webkit-font-smoothing: antialiased;
+      overflow-x: hidden;
+    }
+
+    /* Grain */
+    body::after {
+      content: '';
+      position: fixed;
+      inset: 0;
+      pointer-events: none;
+      z-index: 9999;
+      opacity: 0.025;
+      background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+      background-size: 128px;
+    }
+
+    ::selection {
+      background: rgba(232, 161, 53, 0.25);
+      color: #fff;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { color: var(--accent-hover); }
+
+    /* ---- NAV ---- */
+    nav {
+      position: fixed;
+      top: 0;
+      left: 0;
+      right: 0;
+      z-index: 100;
+      padding: 1rem 2rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      background: rgba(7, 7, 10, 0.8);
+      border-bottom: 1px solid transparent;
+      transition: border-color 0.3s;
+    }
+    nav.scrolled { border-bottom-color: var(--border); }
+    .nav-left {
+      font-family: var(--mono);
+      font-size: 0.82rem;
+      color: var(--text-2);
+      letter-spacing: -0.02em;
+    }
+    .nav-left strong { color: var(--text); font-weight: 500; }
+    .nav-links { display: flex; gap: 1.5rem; align-items: center; }
+    .nav-links a {
+      font-size: 0.85rem;
+      color: var(--text-2);
+      font-weight: 400;
+      transition: color 0.2s;
+    }
+    .nav-links a:hover { color: var(--text); }
+    .nav-links .gh-link {
+      display: flex;
+      align-items: center;
+      gap: 0.4rem;
+    }
+    .nav-links svg { width: 18px; height: 18px; fill: currentColor; }
+
+    /* ---- HERO ---- */
+    .hero {
+      position: relative;
+      padding: 10rem 2rem 6rem;
+      max-width: var(--max-w);
+      margin: 0 auto;
+    }
+    .hero-glow {
+      position: absolute;
+      width: 900px;
+      height: 500px;
+      top: -50px;
+      left: 50%;
+      transform: translateX(-50%);
+      background:
+        radial-gradient(ellipse at 35% 40%, rgba(232, 161, 53, 0.10), transparent 55%),
+        radial-gradient(ellipse at 65% 60%, rgba(200, 120, 255, 0.04), transparent 50%);
+      filter: blur(80px);
+      pointer-events: none;
+    }
+    .hero-label {
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      color: var(--accent);
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      margin-bottom: 1.5rem;
+      opacity: 0.8;
+    }
+    .hero h1 {
+      font-family: var(--heading);
+      font-weight: 800;
+      font-size: clamp(2.6rem, 6vw, 4.2rem);
+      line-height: 1.08;
+      letter-spacing: -0.035em;
+      color: #fff;
+      max-width: 680px;
+      margin-bottom: 1.5rem;
+    }
+    .hero p {
+      font-size: 1.12rem;
+      color: var(--text-2);
+      max-width: 540px;
+      line-height: 1.7;
+      margin-bottom: 2.5rem;
+    }
+    .install-row {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      flex-wrap: wrap;
+      margin-bottom: 2rem;
+    }
+    .install-cmd {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 0.7rem 1rem;
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      color: var(--text);
+      cursor: pointer;
+      transition: border-color 0.2s, background 0.2s;
+      user-select: all;
+    }
+    .install-cmd:hover {
+      border-color: var(--accent-border);
+      background: var(--surface-2);
+    }
+    .install-cmd .prompt { color: var(--accent); user-select: none; }
+    .install-cmd .copy-icon {
+      color: var(--text-3);
+      transition: color 0.2s;
+      user-select: none;
+      flex-shrink: 0;
+    }
+    .install-cmd:hover .copy-icon { color: var(--text-2); }
+    .install-cmd .copy-icon svg { width: 15px; height: 15px; display: block; }
+    .hero-links { display: flex; gap: 1.5rem; align-items: center; }
+    .hero-links a {
+      font-size: 0.88rem;
+      font-weight: 400;
+      color: var(--text-2);
+      display: flex;
+      align-items: center;
+      gap: 0.35rem;
+    }
+    .hero-links a:hover { color: var(--text); }
+
+    /* ---- SECTIONS ---- */
+    section {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 5rem 2rem;
+    }
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--text-3);
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      margin-bottom: 1rem;
+    }
+    section h2 {
+      font-family: var(--heading);
+      font-weight: 700;
+      font-size: 1.6rem;
+      letter-spacing: -0.02em;
+      color: #fff;
+      margin-bottom: 2.5rem;
+    }
+
+    /* ---- FLOW ---- */
+    .flow {
+      display: grid;
+      grid-template-columns: 1fr auto 1fr auto 1fr;
+      align-items: center;
+      gap: 0;
+    }
+    .flow-node {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 1.8rem 1.5rem;
+      transition: border-color 0.3s;
+    }
+    .flow-node:hover { border-color: var(--accent-border); }
+    .flow-node h3 {
+      font-family: var(--heading);
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 0.5rem;
+    }
+    .flow-node p {
+      font-size: 0.82rem;
+      color: var(--text-2);
+      line-height: 1.55;
+    }
+    .flow-node .node-tag {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--accent);
+      background: var(--accent-dim);
+      border: 1px solid var(--accent-border);
+      border-radius: 4px;
+      padding: 0.15rem 0.45rem;
+      display: inline-block;
+      margin-bottom: 0.8rem;
+    }
+    .flow-arrow {
+      color: var(--text-3);
+      font-size: 1.4rem;
+      padding: 0 0.8rem;
+      opacity: 0.5;
+    }
+
+    /* ---- CODE ---- */
+    .code-block {
+      background: #0c0c10;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .code-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid var(--border);
+    }
+    .code-dots {
+      display: flex;
+      gap: 6px;
+    }
+    .code-dots span {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--border);
+    }
+    .code-copy-btn {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--text-3);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.2rem 0.55rem;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+    }
+    .code-copy-btn:hover { color: var(--text-2); border-color: var(--text-3); }
+    .code-body {
+      padding: 1.2rem 1.4rem;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      line-height: 1.75;
+      overflow-x: auto;
+      color: var(--text-2);
+    }
+    .code-body .kw { color: var(--code-kw); }
+    .code-body .fn { color: var(--code-fn); }
+    .code-body .str { color: var(--code-str); }
+    .code-body .cm { color: var(--code-cm); font-style: italic; }
+    .code-body .prop { color: var(--code-prop); }
+    .code-body .tag { color: var(--code-tag); }
+    .code-body .attr { color: var(--code-attr); }
+    .code-body .num { color: #fb923c; }
+
+    /* ---- DETAILS ---- */
+    .details-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+    }
+    .detail-cell {
+      background: var(--surface);
+      padding: 1.6rem 1.5rem;
+    }
+    .detail-cell h3 {
+      font-family: var(--heading);
+      font-size: 0.9rem;
+      font-weight: 700;
+      color: #fff;
+      margin-bottom: 0.4rem;
+    }
+    .detail-cell p {
+      font-size: 0.82rem;
+      color: var(--text-2);
+      line-height: 1.55;
+    }
+
+    /* ---- FOOTER ---- */
+    footer {
+      max-width: var(--max-w);
+      margin: 0 auto;
+      padding: 3rem 2rem 4rem;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 1rem;
+    }
+    footer .foot-left {
+      font-size: 0.8rem;
+      color: var(--text-3);
+    }
+    footer .foot-links {
+      display: flex;
+      gap: 1.5rem;
+    }
+    footer .foot-links a {
+      font-size: 0.8rem;
+      color: var(--text-3);
+      transition: color 0.2s;
+    }
+    footer .foot-links a:hover { color: var(--text-2); }
+
+    /* ---- ANIMATIONS ---- */
+    .reveal {
+      opacity: 0;
+      transform: translateY(20px);
+      transition: opacity 0.6s ease, transform 0.6s ease;
+    }
+    .reveal.visible {
+      opacity: 1;
+      transform: translateY(0);
+    }
+    .reveal-d1 { transition-delay: 0.08s; }
+    .reveal-d2 { transition-delay: 0.16s; }
+    .reveal-d3 { transition-delay: 0.24s; }
+    .reveal-d4 { transition-delay: 0.32s; }
+    .reveal-d5 { transition-delay: 0.40s; }
+
+    @media (prefers-reduced-motion: reduce) {
+      .reveal { opacity: 1; transform: none; transition: none; }
+    }
+
+    /* ---- RESPONSIVE ---- */
+    @media (max-width: 768px) {
+      .hero { padding: 8rem 1.5rem 4rem; }
+      section { padding: 3.5rem 1.5rem; }
+      .flow {
+        grid-template-columns: 1fr;
+        gap: 0;
+      }
+      .flow-arrow {
+        transform: rotate(90deg);
+        padding: 0.5rem 0;
+        text-align: center;
+      }
+      .details-grid { grid-template-columns: 1fr; }
+      .install-row { flex-direction: column; align-items: flex-start; }
+      footer { flex-direction: column; align-items: flex-start; }
+    }
+  </style>
+</head>
+<body>
+
+  <nav id="nav">
+    <div class="nav-left"><strong>@businessmaps</strong>/bifrost</div>
+    <div class="nav-links">
+      <a href="https://www.npmjs.com/package/@businessmaps/bifrost">npm</a>
+      <a href="architecture.md">Docs</a>
+      <a class="gh-link" href="https://github.com/Business-Maps/bifrost">
+        <svg viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+        GitHub
+      </a>
+    </div>
+  </nav>
+
+  <div class="hero">
+    <div class="hero-glow"></div>
+    <div class="hero-label reveal">Open source MCP server</div>
+    <h1 class="reveal reveal-d1">Let AI call functions<br>in your browser</h1>
+    <p class="reveal reveal-d2">
+      A daemon that bridges any MCP&ndash;compatible AI tool to your browser tabs
+      over WebSocket. Register JavaScript functions as tools. The AI calls them.
+    </p>
+    <div class="install-row reveal reveal-d3">
+      <div class="install-cmd" id="installCmd" title="Click to copy">
+        <span class="prompt">$</span>
+        <span>npm i -g @businessmaps/bifrost</span>
+        <span class="copy-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        </span>
+      </div>
+    </div>
+    <div class="hero-links reveal reveal-d4">
+      <a href="https://github.com/Business-Maps/bifrost">View source &rarr;</a>
+      <a href="demo/">Try the demo &rarr;</a>
+    </div>
+  </div>
+
+  <section>
+    <div class="section-label reveal">How it works</div>
+    <h2 class="reveal reveal-d1">Three components, one bridge</h2>
+    <div class="flow">
+      <div class="flow-node reveal reveal-d1">
+        <div class="node-tag">stdio</div>
+        <h3>MCP Client</h3>
+        <p>Any MCP-compatible AI tool. Sends tool calls over JSON-RPC.</p>
+      </div>
+      <div class="flow-arrow reveal reveal-d2">&rarr;</div>
+      <div class="flow-node reveal reveal-d2">
+        <div class="node-tag">daemon</div>
+        <h3>bifrost</h3>
+        <p>Routes calls between stdio and WebSocket. Zero dependencies.</p>
+      </div>
+      <div class="flow-arrow reveal reveal-d3">&rarr;</div>
+      <div class="flow-node reveal reveal-d3">
+        <div class="node-tag">ws://localhost</div>
+        <h3>Your Browser App</h3>
+        <p>Registers tools as JS functions. Handlers run with full browser API access.</p>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-label reveal">Usage</div>
+    <h2 class="reveal reveal-d1">Drop in and connect</h2>
+    <div class="install-row reveal reveal-d1" style="margin-bottom: 2rem">
+      <div class="install-cmd" onclick="navigator.clipboard.writeText('npm i @businessmaps/bifrost-browser')" title="Click to copy">
+        <span class="prompt">$</span>
+        <span>npm i @businessmaps/bifrost-browser</span>
+        <span class="copy-icon">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg>
+        </span>
+      </div>
+      <span style="font-size:0.82rem;color:var(--text-3)">or</span>
+      <code style="font-family:var(--mono);font-size:0.8rem;color:var(--text-2)">&lt;script src="https://unpkg.com/@businessmaps/bifrost-browser"&gt;</code>
+    </div>
+    <div class="code-block reveal reveal-d2">
+      <div class="code-header">
+        <div class="code-dots"><span></span><span></span><span></span></div>
+        <button class="code-copy-btn" id="codeCopyBtn">Copy</button>
+      </div>
+      <pre class="code-body" id="codeBody"><span class="kw">import</span> { <span class="fn">BifrostBrowser</span> } <span class="kw">from</span> <span class="str">"@businessmaps/bifrost-browser"</span>;
+
+<span class="kw">const</span> bridge = <span class="kw">new</span> <span class="fn">BifrostBrowser</span>({
+  <span class="prop">port</span>: <span class="num">3099</span>,
+  <span class="prop">token</span>: <span class="str">"TOKEN"</span>,  <span class="cm">// check daemon stderr</span>
+});
+
+bridge.<span class="fn">registerTools</span>([{
+  <span class="prop">name</span>: <span class="str">"get_selection"</span>,
+  <span class="prop">description</span>: <span class="str">"Returns selected text"</span>,
+  <span class="prop">inputSchema</span>: { <span class="prop">type</span>: <span class="str">"object"</span>, <span class="prop">properties</span>: {} },
+  <span class="prop">handler</span>: <span class="kw">async</span> () =&gt; <span class="fn">window</span>.<span class="fn">getSelection</span>().<span class="fn">toString</span>(),
+}]);
+
+bridge.<span class="fn">connect</span>();</pre>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-label reveal">Details</div>
+    <h2 class="reveal reveal-d1">What you get</h2>
+    <div class="details-grid reveal reveal-d2">
+      <div class="detail-cell">
+        <h3>Zero dependencies</h3>
+        <p>No node_modules. The daemon is one Node.js script with a hand-rolled WebSocket server. Just needs Node 18+.</p>
+      </div>
+      <div class="detail-cell">
+        <h3>Full browser access</h3>
+        <p>Handlers run in the browser tab. DOM, Canvas, IndexedDB, Clipboard, fetch, WebGL, Geolocation&mdash;whatever the platform exposes.</p>
+      </div>
+      <div class="detail-cell">
+        <h3>Multi-tab</h3>
+        <p>Connect multiple tabs at once. Each registers its own tools. Calls route to the tab that owns the tool.</p>
+      </div>
+      <div class="detail-cell">
+        <h3>Token auth</h3>
+        <p>Random token generated on startup. Connections without it are rejected. Binds to localhost only.</p>
+      </div>
+      <div class="detail-cell">
+        <h3>Auto-reconnect</h3>
+        <p>Client library handles disconnects. Tools re-register automatically when the connection comes back.</p>
+      </div>
+      <div class="detail-cell">
+        <h3>Any MCP client</h3>
+        <p>Standard MCP over stdio. Works with any tool that speaks the protocol. Not locked to a single vendor.</p>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="foot-left">Apache 2.0</div>
+    <div class="foot-links">
+      <a href="https://github.com/Business-Maps/bifrost">GitHub</a>
+      <a href="https://www.npmjs.com/package/@businessmaps/bifrost">npm</a>
+      <a href="architecture.md">Architecture</a>
+      <a href="client-api.md">Client API</a>
+    </div>
+  </footer>
+
+  <script>
+    // Scroll reveal
+    const obs = new IntersectionObserver((entries) => {
+      entries.forEach(e => { if (e.isIntersecting) e.target.classList.add('visible'); });
+    }, { threshold: 0.12 });
+    document.querySelectorAll('.reveal').forEach(el => obs.observe(el));
+
+    // Nav border on scroll
+    const nav = document.getElementById('nav');
+    window.addEventListener('scroll', () => {
+      nav.classList.toggle('scrolled', window.scrollY > 20);
+    }, { passive: true });
+
+    // Copy install command
+    document.getElementById('installCmd').addEventListener('click', () => {
+      navigator.clipboard.writeText('npm i -g @businessmaps/bifrost');
+      const el = document.getElementById('installCmd');
+      el.style.borderColor = 'var(--accent)';
+      setTimeout(() => el.style.borderColor = '', 1200);
+    });
+
+    // Copy code
+    document.getElementById('codeCopyBtn').addEventListener('click', () => {
+      const code = document.getElementById('codeBody').textContent;
+      navigator.clipboard.writeText(code);
+      const btn = document.getElementById('codeCopyBtn');
+      btn.textContent = 'Copied';
+      setTimeout(() => btn.textContent = 'Copy', 1500);
+    });
+  </script>
+
+</body>
+</html>

@@ -1,0 +1,490 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Bifrost  - Demo App</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600;700&family=Outfit:wght@300;500;700&display=swap');
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg: #0c0c0f;
+      --surface: #16161b;
+      --border: #2a2a33;
+      --text: #e4e4e9;
+      --text-dim: #7a7a88;
+      --accent: #6ee7b7;
+      --accent-dim: rgba(110, 231, 183, 0.1);
+      --red: #f87171;
+      --red-dim: rgba(248, 113, 113, 0.1);
+      --yellow: #fbbf24;
+      --mono: 'JetBrains Mono', monospace;
+      --sans: 'Outfit', sans-serif;
+    }
+
+    body {
+      font-family: var(--sans);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 720px;
+      margin: 0 auto;
+    }
+
+    h1 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.03em;
+      margin-bottom: 0.25rem;
+    }
+
+    .subtitle {
+      color: var(--text-dim);
+      font-size: 0.85rem;
+      margin-bottom: 2rem;
+    }
+
+    /* Status indicator */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+    }
+
+    .status-dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: var(--red);
+      transition: background 0.3s;
+    }
+
+    .status-dot.connected {
+      background: var(--accent);
+      box-shadow: 0 0 8px rgba(110, 231, 183, 0.4);
+    }
+
+    .status-label {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      color: var(--text-dim);
+    }
+
+    .status-label .highlight {
+      color: var(--text);
+    }
+
+    /* Tool list */
+    .section-label {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      margin-bottom: 0.5rem;
+    }
+
+    .tools-grid {
+      display: grid;
+      gap: 0.5rem;
+      margin-bottom: 1.5rem;
+    }
+
+    .tool-card {
+      padding: 0.75rem 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .tool-name {
+      font-family: var(--mono);
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .tool-desc {
+      font-size: 0.78rem;
+      color: var(--text-dim);
+    }
+
+    /* Log */
+    .log-container {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      overflow: hidden;
+    }
+
+    .log-header {
+      padding: 0.6rem 1rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .log-header .section-label { margin-bottom: 0; }
+
+    .log-clear {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      color: var(--text-dim);
+      background: none;
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 0.2rem 0.5rem;
+      cursor: pointer;
+      transition: color 0.2s, border-color 0.2s;
+    }
+
+    .log-clear:hover {
+      color: var(--text);
+      border-color: var(--text-dim);
+    }
+
+    .log-entries {
+      padding: 0.75rem 1rem;
+      max-height: 400px;
+      overflow-y: auto;
+      font-family: var(--mono);
+      font-size: 0.75rem;
+      line-height: 1.7;
+    }
+
+    .log-entry {
+      padding: 0.15rem 0;
+      animation: fadeIn 0.2s ease-out;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(4px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    .log-entry .time {
+      color: var(--text-dim);
+      margin-right: 0.5rem;
+    }
+
+    .log-entry.event-connected { color: var(--accent); }
+    .log-entry.event-disconnected { color: var(--red); }
+    .log-entry.event-tool_call { color: var(--yellow); }
+    .log-entry.event-result { color: var(--accent); }
+    .log-entry.event-error { color: var(--red); }
+
+    .empty-log {
+      color: var(--text-dim);
+      font-style: italic;
+    }
+
+    /* Connect button */
+    .connect-btn {
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      font-weight: 600;
+      padding: 0.5rem 1.2rem;
+      border-radius: 6px;
+      border: 1px solid var(--accent);
+      background: var(--accent-dim);
+      color: var(--accent);
+      cursor: pointer;
+      transition: all 0.2s;
+      margin-left: auto;
+    }
+
+    .connect-btn:hover {
+      background: rgba(110, 231, 183, 0.2);
+    }
+
+    .connect-btn.disconnect {
+      border-color: var(--red);
+      color: var(--red);
+      background: var(--red-dim);
+    }
+
+    .connect-btn.disconnect:hover {
+      background: rgba(248, 113, 113, 0.2);
+    }
+
+    /* Token input */
+    .token-row {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      padding: 0.75rem 1rem;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+    }
+
+    .token-row label {
+      font-family: var(--mono);
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-dim);
+      white-space: nowrap;
+    }
+
+    .token-row input {
+      flex: 1;
+      font-family: var(--mono);
+      font-size: 0.8rem;
+      padding: 0.4rem 0.6rem;
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      color: var(--text);
+      outline: none;
+    }
+
+    .token-row input:focus {
+      border-color: var(--accent);
+    }
+
+    .token-row .hint {
+      font-family: var(--mono);
+      font-size: 0.65rem;
+      color: var(--text-dim);
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Bifrost</h1>
+    <p class="subtitle">Connect this browser app to Claude Code via the local daemon</p>
+
+    <div class="status-bar">
+      <div class="status-dot" id="statusDot"></div>
+      <span class="status-label">
+        <span class="highlight" id="statusText">Disconnected</span> · ws://localhost:<span id="portLabel">3099</span>
+      </span>
+      <button class="connect-btn" id="connectBtn" onclick="toggleConnection()">Connect</button>
+    </div>
+
+    <div class="token-row">
+      <label>Token</label>
+      <input type="text" id="tokenInput" placeholder="Paste token from daemon stderr" />
+      <span class="hint">shown on daemon startup</span>
+    </div>
+
+    <div class="section-label">Registered Tools</div>
+    <div class="tools-grid" id="toolsGrid"></div>
+
+    <div class="log-container">
+      <div class="log-header">
+        <div class="section-label">Activity Log</div>
+        <button class="log-clear" onclick="clearLog()">Clear</button>
+      </div>
+      <div class="log-entries" id="logEntries">
+        <div class="log-entry empty-log">Waiting for connection...</div>
+      </div>
+    </div>
+  </div>
+
+  <script type="module">
+    import { BifrostBrowser } from "https://unpkg.com/@businessmaps/bifrost-browser/index.js";
+    // ================================================================
+    // Define your tools here  - these become available to Claude Code
+    // ================================================================
+    const MY_TOOLS = [
+      {
+        name: "get_page_info",
+        description: "Returns info about the current browser page (title, URL, viewport size)",
+        inputSchema: { type: "object", properties: {} },
+        handler: async () => ({
+          title: document.title,
+          url: window.location.href,
+          viewport: { width: window.innerWidth, height: window.innerHeight },
+          userAgent: navigator.userAgent,
+        }),
+      },
+      {
+        name: "get_local_storage",
+        description: "Read a value from the browser's localStorage",
+        inputSchema: {
+          type: "object",
+          properties: {
+            key: { type: "string", description: "The localStorage key to read" },
+          },
+          required: ["key"],
+        },
+        handler: async ({ key }) => {
+          const value = localStorage.getItem(key);
+          return value !== null ? value : `Key "${key}" not found in localStorage`;
+        },
+      },
+      {
+        name: "set_local_storage",
+        description: "Write a value to the browser's localStorage",
+        inputSchema: {
+          type: "object",
+          properties: {
+            key: { type: "string", description: "The localStorage key" },
+            value: { type: "string", description: "The value to store" },
+          },
+          required: ["key", "value"],
+        },
+        handler: async ({ key, value }) => {
+          localStorage.setItem(key, value);
+          return `Stored "${key}" = "${value}"`;
+        },
+      },
+      {
+        name: "query_dom",
+        description: "Run a CSS selector on the page and return matching element info",
+        inputSchema: {
+          type: "object",
+          properties: {
+            selector: { type: "string", description: "CSS selector to query" },
+          },
+          required: ["selector"],
+        },
+        handler: async ({ selector }) => {
+          const els = document.querySelectorAll(selector);
+          return Array.from(els).slice(0, 20).map((el) => ({
+            tag: el.tagName.toLowerCase(),
+            id: el.id || undefined,
+            class: el.className || undefined,
+            text: el.textContent?.slice(0, 200),
+          }));
+        },
+      },
+      {
+        name: "show_notification",
+        description: "Show a visual notification/toast in the browser app",
+        inputSchema: {
+          type: "object",
+          properties: {
+            message: { type: "string", description: "The message to display" },
+          },
+          required: ["message"],
+        },
+        handler: async ({ message }) => {
+          alert(message); // simple  - replace with a toast in a real app
+          return "Notification shown";
+        },
+      },
+    ];
+
+    // ================================================================
+    // Bridge setup
+    // ================================================================
+    const bridge = new BifrostBrowser({ port: 3099 });
+    let isConnected = false;
+
+    bridge.registerTools(MY_TOOLS);
+
+    bridge.on("connected", () => {
+      isConnected = true;
+      updateUI();
+      appendLog("connected", "Connected to daemon");
+    });
+
+    bridge.on("disconnected", () => {
+      isConnected = false;
+      updateUI();
+      appendLog("disconnected", "Disconnected from daemon");
+    });
+
+    bridge.on("tool_call", (msg) => {
+      appendLog("tool_call", `Tool called: ${msg.name}(${JSON.stringify(msg.arguments || {})})`);
+    });
+
+    bridge.on("error", (err) => {
+      appendLog("error", `WebSocket error`);
+    });
+
+    // ================================================================
+    // UI
+    // ================================================================
+    function renderTools() {
+      const grid = document.getElementById("toolsGrid");
+      grid.innerHTML = MY_TOOLS.map((t) => `
+        <div class="tool-card">
+          <div>
+            <div class="tool-name">${t.name}</div>
+            <div class="tool-desc">${t.description}</div>
+          </div>
+        </div>
+      `).join("");
+    }
+
+    function updateUI() {
+      const dot = document.getElementById("statusDot");
+      const text = document.getElementById("statusText");
+      const btn = document.getElementById("connectBtn");
+
+      if (isConnected) {
+        dot.classList.add("connected");
+        text.textContent = "Connected";
+        btn.textContent = "Disconnect";
+        btn.classList.add("disconnect");
+      } else {
+        dot.classList.remove("connected");
+        text.textContent = "Disconnected";
+        btn.textContent = "Connect";
+        btn.classList.remove("disconnect");
+      }
+    }
+
+    function toggleConnection() {
+      if (isConnected) {
+        bridge.disconnect();
+      } else {
+        const token = document.getElementById("tokenInput").value.trim();
+        if (token) bridge.token = token;
+        bridge.autoReconnect = true;
+        bridge.connect();
+      }
+    }
+
+    function appendLog(event, message) {
+      const container = document.getElementById("logEntries");
+      // Remove empty state
+      const empty = container.querySelector(".empty-log");
+      if (empty) empty.remove();
+
+      const entry = document.createElement("div");
+      entry.className = `log-entry event-${event}`;
+      const time = new Date().toLocaleTimeString("en-US", { hour12: false });
+      const timeSpan = document.createElement("span");
+      timeSpan.className = "time";
+      timeSpan.textContent = time;
+      entry.appendChild(timeSpan);
+      entry.appendChild(document.createTextNode(message));
+      container.appendChild(entry);
+      container.scrollTop = container.scrollHeight;
+    }
+
+    function clearLog() {
+      document.getElementById("logEntries").innerHTML =
+        '<div class="log-entry empty-log">Log cleared</div>';
+    }
+
+    // Expose to onclick handlers (module scope is isolated)
+    window.toggleConnection = toggleConnection;
+    window.clearLog = clearLog;
+
+    // Init
+    renderTools();
+  </script>
+</body>
+</html>
